@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # ── MongoDB (local dev only — use Atlas in production)
+  mongo:
+    image: mongo:7.0
+    container_name: interviewai_mongo
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    environment:
+      MONGO_INITDB_DATABASE: interviewai
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - interviewai_network
+
+  # ── Backend API Server
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: interviewai_backend
+    restart: unless-stopped
+    ports:
+      - '5000:5000'
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      MONGODB_URI: mongodb://mongo:27017/interviewai
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      CLIENT_URL: http://localhost:3000
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./backend/uploads:/app/uploads
+    depends_on:
+      - mongo
+    networks:
+      - interviewai_network
+    command: npm run dev
+
+  # ── React Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: interviewai_frontend
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      REACT_APP_API_URL: http://localhost:5000/api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - interviewai_network
+
+volumes:
+  mongo_data:
+
+networks:
+  interviewai_network:
+    driver: bridge
