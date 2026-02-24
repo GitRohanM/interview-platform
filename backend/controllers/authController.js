@@ -2,6 +2,8 @@ const { validationResult } = require('express-validator');
 const User = require('../models/User');
 const { sendTokenResponse, verifyRefreshToken, clearRefreshCookie, generateAccessToken } = require('../services/tokenService');
 const logger = require('../config/logger');
+const crypto = require('crypto');
+const sendVerificationEmail = require('../services/emailService');
 
 // ── POST /api/auth/register
 const register = async (req, res) => {
@@ -18,8 +20,24 @@ const register = async (req, res) => {
   }
 
   const user = await User.create({ name, email, password, role });
+
+  // 🔐 Generate verification token
+  const verificationToken = crypto.randomBytes(32).toString('hex');
+
+  user.emailVerificationToken = verificationToken;
+  user.emailVerificationExpire = Date.now() + 10 * 60 * 1000; // 10 minutes expiry
+
+  await user.save({ validateBeforeSave: false });
+
   logger.info(`New user registered: ${email}`);
-  sendTokenResponse(user, 201, res);
+
+  // 📧 Send verification email
+  // await sendVerificationEmail(user.email, verificationToken);
+
+  res.status(201).json({
+    success: true,
+    message: 'Verification email sent. Please check your inbox.'
+  });
 };
 
 // ── POST /api/auth/login
@@ -31,7 +49,6 @@ const login = async (req, res) => {
 
   const { email, password } = req.body;
 
-  // Explicitly select password (hidden by default)
   const user = await User.findOne({ email }).select('+password');
   if (!user) {
     return res.status(401).json({ success: false, message: 'Invalid email or password.' });
@@ -42,11 +59,18 @@ const login = async (req, res) => {
     return res.status(401).json({ success: false, message: 'Invalid email or password.' });
   }
 
+  // 🚨 NEW: Check if email is verified
+  if (!user.isEmailVerified) {
+    return res.status(403).json({
+      success: false,
+      message: 'Please verify your email before logging in.'
+    });
+  }
+
   if (!user.isActive) {
     return res.status(403).json({ success: false, message: 'Account deactivated. Contact support.' });
   }
 
-  // Update last login
   user.lastLogin = new Date();
   await user.save({ validateBeforeSave: false });
 
@@ -89,5 +113,32 @@ const getMe = async (req, res) => {
   const user = await User.findById(req.user._id);
   res.json({ success: true, user });
 };
+// ── GET /api/auth/verify-email/:token
+const verifyEmail = async (req, res) => {
+  const { token } = req.params;
 
-module.exports = { register, login, refreshToken, logout, getMe };
+  const user = await User.findOne({
+    emailVerificationToken: token,
+    emailVerificationExpire: { $gt: Date.now() }
+  });
+
+  if (!user) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid or expired verification token.'
+    });
+  }
+
+  user.isEmailVerified = true;
+  user.emailVerificationToken = undefined;
+  user.emailVerificationExpire = undefined;
+
+  await user.save({ validateBeforeSave: false });
+
+  res.json({
+    success: true,
+    message: 'Email verified successfully. You can now log in.'
+  });
+};
+
+module.exports = { register, login, refreshToken, logout, getMe, verifyEmail };

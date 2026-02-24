@@ -39,6 +39,17 @@ const userSchema = new mongoose.Schema({
   avatar: { type: String, default: '' }, // URL or initials
   refreshToken: { type: String, select: false },
   isActive: { type: Boolean, default: true },
+  isEmailVerified: {
+  type: Boolean,
+  default: false
+  },
+  emailVerificationToken: {
+    type: String,
+    select: false
+  },
+  emailVerificationExpire: {
+    type: Date
+  },
   lastLogin: { type: Date },
   // Aggregated stats (updated on session completion)
   stats: {

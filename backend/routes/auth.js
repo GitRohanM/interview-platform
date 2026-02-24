@@ -1,9 +1,10 @@
 // ─── routes/auth.js ───────────────────────────────────────────
 const express = require('express');
 const { body } = require('express-validator');
-const { register, login, refreshToken, logout, getMe } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 const { authLimiter } = require('../middleware/rateLimiter');
+const { register, login, refreshToken, logout, getMe, verifyEmail } = require('../controllers/authController');
+
 
 const router = express.Router();
 
@@ -23,5 +24,6 @@ router.post('/login', authLimiter, loginRules, login);
 router.post('/refresh', refreshToken);
 router.post('/logout', protect, logout);
 router.get('/me', protect, getMe);
+router.get('/verify-email/:token', verifyEmail);
 
 module.exports = router;
